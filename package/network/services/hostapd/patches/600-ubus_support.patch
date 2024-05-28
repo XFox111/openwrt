@@ -151,7 +151,15 @@ probe/assoc/auth requests via object subscribe.
  
  	if (iface->is_no_ir) {
  		hostapd_set_state(iface, HAPD_IFACE_NO_IR);
-@@ -3076,6 +3081,7 @@ void hostapd_interface_deinit_free(struc
+@@ -2638,6 +2643,7 @@ int hostapd_setup_interface_complete(str
+ 
+ 	if (err) {
+ 		wpa_printf(MSG_ERROR, "Interface initialization failed");
++		hostapd_ubus_free_iface(iface);
+ 		iface->need_to_start_in_sync = 0;
+ 
+ 		if (iface->is_no_ir) {
+@@ -3076,6 +3082,7 @@ void hostapd_interface_deinit_free(struc
  		   (unsigned int) iface->conf->num_bss);
  	driver = iface->bss[0]->driver;
  	drv_priv = iface->bss[0]->drv_priv;
@@ -159,6 +167,14 @@ probe/assoc/auth requests via object subscribe.
  	hostapd_interface_deinit(iface);
  	wpa_printf(MSG_DEBUG, "%s: driver=%p drv_priv=%p -> hapd_deinit",
  		   __func__, driver, drv_priv);
+@@ -3765,6 +3772,7 @@ void hostapd_set_state(struct hostapd_if
+ 	wpa_printf(MSG_INFO, "%s: interface state %s->%s",
+ 		   iface->conf ? iface->conf->bss[0]->iface : "N/A",
+ 		   hostapd_state_text(iface->state), hostapd_state_text(s));
++	hostapd_ubus_event_iface_state(iface, s);
+ 	iface->state = s;
+ }
+ 
 --- a/src/ap/hostapd.h
 +++ b/src/ap/hostapd.h
 @@ -18,6 +18,7 @@
@@ -177,7 +193,15 @@ probe/assoc/auth requests via object subscribe.
  	int interface_added; /* virtual interface added for this BSS */
  	unsigned int started:1;
  	unsigned int disabled:1;
-@@ -707,6 +709,7 @@ hostapd_alloc_bss_data(struct hostapd_if
+@@ -515,6 +517,7 @@ struct hostapd_sta_info {
+  * struct hostapd_iface - hostapd per-interface data structure
+  */
+ struct hostapd_iface {
++	struct hostapd_ubus_bss ubus;
+ 	struct hapd_interfaces *interfaces;
+ 	void *owner;
+ 	char *config_fname;
+@@ -707,6 +710,7 @@ hostapd_alloc_bss_data(struct hostapd_if
  		       struct hostapd_bss_config *bss);
  int hostapd_setup_interface(struct hostapd_iface *iface);
  int hostapd_setup_interface_complete(struct hostapd_iface *iface, int err);
@@ -231,19 +255,35 @@ probe/assoc/auth requests via object subscribe.
  	struct sta_info *sta;
  	u8 *tmp = NULL;
  #ifdef CONFIG_FILS
-@@ -5484,6 +5496,11 @@ static void handle_assoc(struct hostapd_
- 		left = res;
- 	}
- #endif /* CONFIG_FILS */
+@@ -5252,6 +5264,12 @@ static void handle_assoc(struct hostapd_
+ 	bool set_beacon = false;
+ 	bool mld_addrs_not_translated = false;
+ 
 +	struct hostapd_ubus_request req = {
 +		.type = HOSTAPD_UBUS_ASSOC_REQ,
 +		.mgmt_frame = mgmt,
 +		.ssi_signal = rssi,
 +	};
++
+ 	if (len < IEEE80211_HDRLEN + (reassoc ? sizeof(mgmt->u.reassoc_req) :
+ 				      sizeof(mgmt->u.assoc_req))) {
+ 		wpa_printf(MSG_INFO, "handle_assoc(reassoc=%d) - too short payload (len=%lu)",
+@@ -5453,6 +5471,14 @@ static void handle_assoc(struct hostapd_
+ 		goto fail;
+ 	}
  
- 	/* followed by SSID and Supported rates; and HT capabilities if 802.11n
- 	 * is used */
-@@ -5586,6 +5603,13 @@ static void handle_assoc(struct hostapd_
++	ubus_resp = hostapd_ubus_handle_event(hapd, &req);
++	if (ubus_resp) {
++		wpa_printf(MSG_DEBUG, "Station " MACSTR " assoc rejected by ubus handler.\n",
++		       MAC2STR(mgmt->sa));
++		resp = ubus_resp > 0 ? (u16) ubus_resp : WLAN_STATUS_UNSPECIFIED_FAILURE;
++		goto fail;
++	}
++
+ 	/*
+ 	 * sta->capability is used in check_assoc_ies() for RRM enabled
+ 	 * capability element.
+@@ -5586,6 +5612,13 @@ static void handle_assoc(struct hostapd_
  	if (set_beacon)
  		ieee802_11_set_beacons(hapd->iface);
  
@@ -257,7 +297,7 @@ probe/assoc/auth requests via object subscribe.
   fail:
  
  	/*
-@@ -5836,6 +5860,7 @@ static void handle_disassoc(struct hosta
+@@ -5836,6 +5869,7 @@ static void handle_disassoc(struct hosta
  			   (unsigned long) len);
  		return;
  	}
@@ -265,7 +305,7 @@ probe/assoc/auth requests via object subscribe.
  
  	sta = ap_get_sta(hapd, mgmt->sa);
  	if (!sta) {
-@@ -5867,6 +5892,8 @@ static void handle_deauth(struct hostapd
+@@ -5867,6 +5901,8 @@ static void handle_deauth(struct hostapd
  	/* Clear the PTKSA cache entries for PASN */
  	ptksa_cache_flush(hapd->ptksa, mgmt->sa, WPA_CIPHER_NONE);
  
@@ -753,3 +793,54 @@ probe/assoc/auth requests via object subscribe.
  	if (wpa_s->conf->wps_cred_processing == 1)
  		return 0;
  
+--- a/hostapd/config_file.c
++++ b/hostapd/config_file.c
+@@ -3024,6 +3024,12 @@ static int hostapd_config_fill(struct ho
+ 		   0) {
+ 		bss->radius_das_require_message_authenticator = atoi(pos);
+ #endif /* CONFIG_NO_RADIUS */
++
++#ifdef UBUS_SUPPORT
++	} else if (os_strcmp(buf, "uci_device") == 0) {
++		os_free(bss->uci_device);
++		bss->uci_device = os_strdup(pos);
++#endif /* UBUS_SUPPORT */
+ 	} else if (os_strcmp(buf, "auth_algs") == 0) {
+ 		bss->auth_algs = atoi(pos);
+ 		if (bss->auth_algs == 0) {
+--- a/src/ap/ap_config.c
++++ b/src/ap/ap_config.c
+@@ -887,6 +887,7 @@ void hostapd_config_free_bss(struct host
+ 	os_free(conf->model_description);
+ 	os_free(conf->model_url);
+ 	os_free(conf->upc);
++	os_free(conf->uci_device);
+ 	for (i = 0; i < MAX_WPS_VENDOR_EXTENSIONS; i++)
+ 		wpabuf_free(conf->wps_vendor_ext[i]);
+ 	wpabuf_free(conf->wps_application_ext);
+--- a/src/ap/ap_config.h
++++ b/src/ap/ap_config.h
+@@ -525,6 +525,7 @@ struct hostapd_bss_config {
+ #endif /* CONFIG_WPS */
+ 	int pbc_in_m1;
+ 	char *server_id;
++	char *uci_device;
+ 
+ #define P2P_ENABLED BIT(0)
+ #define P2P_GROUP_OWNER BIT(1)
+--- a/src/ap/ieee802_11_shared.c
++++ b/src/ap/ieee802_11_shared.c
+@@ -1138,13 +1138,11 @@ u8 * hostapd_eid_rsnxe(struct hostapd_da
+ u16 check_ext_capab(struct hostapd_data *hapd, struct sta_info *sta,
+ 		    const u8 *ext_capab_ie, size_t ext_capab_ie_len)
+ {
+-#ifdef CONFIG_INTERWORKING
+ 	/* check for QoS Map support */
+ 	if (ext_capab_ie_len >= 5) {
+ 		if (ext_capab_ie[4] & 0x01)
+ 			sta->qos_map_enabled = 1;
+ 	}
+-#endif /* CONFIG_INTERWORKING */
+ 
+ 	if (ext_capab_ie_len > 0) {
+ 		sta->ecsa_supported = !!(ext_capab_ie[0] & BIT(2));
