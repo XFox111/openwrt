@@ -191,7 +191,15 @@ probe/assoc/auth requests via object subscribe.
  	hostapd_interface_deinit(iface);
  	wpa_printf(MSG_DEBUG, "%s: driver=%p drv_priv=%p -> hapd_deinit",
  		   __func__, driver, drv_priv);
-@@ -3765,6 +3772,7 @@ void hostapd_set_state(struct hostapd_if
+@@ -3687,6 +3694,7 @@ void hostapd_new_assoc_sta(struct hostap
+ 		ap_sta_set_authorized(hapd, sta, 1);
+ 		os_get_reltime(&sta->connected_time);
+ 		accounting_sta_start(hapd, sta);
++		hostapd_ubus_event_sta_account_start(hapd, sta);
+ 	}
+ 
+ 	/* Start IEEE 802.1X authentication process for new stations */
+@@ -3765,6 +3773,7 @@ void hostapd_set_state(struct hostapd_if
  	wpa_printf(MSG_INFO, "%s: interface state %s->%s",
  		   iface->conf ? iface->conf->bss[0]->iface : "N/A",
  		   hostapd_state_text(iface->state), hostapd_state_text(s));
