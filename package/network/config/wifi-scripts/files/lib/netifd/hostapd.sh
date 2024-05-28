@@ -279,10 +279,13 @@ hostapd_common_add_bss_config() {
 	config_add_string 'server:host'
 	config_add_string auth_secret key
 	config_add_int 'auth_port:port' 'port:port'
+	config_add_array auth_server_list
 
 	config_add_string acct_secret
 	config_add_int acct_port
 	config_add_int acct_interval
+	config_add_int ubus_acct_interval
+	config_add_array acct_server_list
 
 	config_add_int bss_load_update_period chan_util_avg_period
 
@@ -553,6 +556,8 @@ hostapd_set_bss_options() {
 	local phy="$2"
 	local vif="$3"
 
+	config_load wireless
+
 	wireless_vif_parse_encryption
 
 	local bss_conf bss_md5sum ft_key
@@ -596,6 +601,8 @@ hostapd_set_bss_options() {
 	set_default airtime_bss_weight 0
 	set_default airtime_bss_limit 0
 	set_default eap_server 0
+
+	json_get_values acct_server_list acct_server_list
 
 	/usr/sbin/hostapd -vfils || fils=0
 
@@ -663,6 +670,22 @@ hostapd_set_bss_options() {
 	[ -n "$sae_require_mfp" ] && append bss_conf "sae_require_mfp=$sae_require_mfp" "$N"
 	[ -n "$sae_pwe" ] && append bss_conf "sae_pwe=$sae_pwe" "$N"
 
+	if [ -n "$acct_server_list" ]; then
+		for radius in $acct_server_list; do
+			config_get acct_server "$radius" server_addr
+			config_get acct_port "$radius" acct_port 1813
+			config_get acct_secret "$radius" acct_secret
+
+			[ -n "$acct_server" ] && [ -n "$acct_secret" ] || continue
+
+			append bss_conf "acct_server_addr=$acct_server" "$N"
+			append bss_conf "acct_server_port=$acct_port" "$N"
+			append bss_conf "acct_server_shared_secret=$acct_secret" "$N"
+			[ -n "$acct_interval" ] && \
+				append bss_conf "radius_acct_interim_interval=$acct_interval" "$N"
+		done
+	fi
+
 	local vlan_possible=""
 
 	case "$auth_type" in
@@ -713,6 +736,7 @@ hostapd_set_bss_options() {
 				eap_reauth_period request_cui \
 				erp_domain mobility_domain \
 				fils_realm fils_dhcp
+			json_get_values auth_server_list auth_server_list
 
 			# radius can provide VLAN ID for clients
 			vlan_possible=1
@@ -754,6 +778,26 @@ hostapd_set_bss_options() {
 
 			[ "$eap_server" -eq 0 ] && json_for_each_item append_auth_server auth_server
 			[ "$request_cui" -gt 0 ] && append bss_conf "radius_request_cui=$request_cui" "$N"
+			[ -n "$auth_server" ] && {
+				append bss_conf "auth_server_addr=$auth_server" "$N"
+				append bss_conf "auth_server_port=$auth_port" "$N"
+				append bss_conf "auth_server_shared_secret=$auth_secret" "$N"
+			}
+
+			if [ -n "$auth_server_list" ]; then
+				for radius in $auth_server_list; do
+					config_get auth_server "$radius" server_addr
+					config_get auth_port "$radius" auth_port 1812
+					config_get auth_secret "$radius" auth_secret
+
+					[ -n "$auth_server" ] && [ -n "$auth_secret" ] || continue
+
+					append bss_conf "auth_server_addr=$auth_server" "$N"
+					append bss_conf "auth_server_port=$auth_port" "$N"
+					append bss_conf "auth_server_shared_secret=$auth_secret" "$N"
+				done
+			fi
+
 			[ -n "$eap_reauth_period" ] && append bss_conf "eap_reauth_period=$eap_reauth_period" "$N"
 
 			[ -n "$dae_client" -a -n "$dae_secret" ] && {
