@@ -8,13 +8,15 @@ as adding/removing interfaces.
 
 --- a/hostapd/Makefile
 +++ b/hostapd/Makefile
-@@ -168,9 +168,21 @@ OBJS += ../src/eapol_auth/eapol_auth_sm.
+@@ -168,11 +168,23 @@ OBJS += ../src/eapol_auth/eapol_auth_sm.
  
  ifdef CONFIG_UBUS
  CFLAGS += -DUBUS_SUPPORT
 -OBJS += ../src/utils/uloop.o
  OBJS += ../src/ap/ubus.o
+ OBJS += ../src/utils/ubus_debug.o
 -LIBS += -lubox -lubus
+ OBJS_c += ../src/utils/ubus_debug_fake.o
 +LIBS += -lubus
 +NEED_ULOOP:=y
 +endif
@@ -139,7 +141,7 @@ as adding/removing interfaces.
  {
  	struct hostapd_bss_config *conf = hapd->conf;
  	u8 ssid[SSID_MAX_LEN + 1];
-@@ -2790,7 +2794,7 @@ hostapd_alloc_bss_data(struct hostapd_if
+@@ -2791,7 +2795,7 @@ hostapd_alloc_bss_data(struct hostapd_if
  }
  
  
@@ -148,7 +150,7 @@ as adding/removing interfaces.
  {
  	if (!hapd)
  		return;
-@@ -3608,7 +3612,8 @@ int hostapd_remove_iface(struct hapd_int
+@@ -3609,7 +3613,8 @@ int hostapd_remove_iface(struct hapd_int
  		hapd_iface = interfaces->iface[i];
  		if (hapd_iface == NULL)
  			return -1;
@@ -187,15 +189,15 @@ as adding/removing interfaces.
  	int interface_added; /* virtual interface added for this BSS */
  	unsigned int started:1;
  	unsigned int disabled:1;
-@@ -518,6 +524,7 @@ struct hostapd_sta_info {
-  */
+@@ -519,6 +525,7 @@ struct hostapd_sta_info {
  struct hostapd_iface {
+ 	struct hostapd_ubus_bss ubus;
  	struct hapd_interfaces *interfaces;
 +	struct hostapd_ucode_iface ucode;
  	void *owner;
  	char *config_fname;
  	struct hostapd_config *conf;
-@@ -718,6 +725,8 @@ struct hostapd_iface * hostapd_init(stru
+@@ -719,6 +726,8 @@ struct hostapd_iface * hostapd_init(stru
  struct hostapd_iface *
  hostapd_interface_init_bss(struct hapd_interfaces *interfaces, const char *phy,
  			   const char *config_fname, int debug);
@@ -513,7 +515,7 @@ as adding/removing interfaces.
  	case NL80211_CMD_DISCONNECT:
 --- a/src/utils/wpa_debug.c
 +++ b/src/utils/wpa_debug.c
-@@ -26,6 +26,10 @@ static FILE *wpa_debug_tracing_file = NU
+@@ -27,6 +27,10 @@ static FILE *wpa_debug_tracing_file = NU
  #define WPAS_TRACE_PFX "wpas <%d>: "
  #endif /* CONFIG_DEBUG_LINUX_TRACING */
  
@@ -524,7 +526,7 @@ as adding/removing interfaces.
  
  int wpa_debug_level = MSG_INFO;
  int wpa_debug_show_keys = 0;
-@@ -210,6 +214,12 @@ void _wpa_printf(int level, const char *
+@@ -211,6 +215,12 @@ void _wpa_printf(int level, const char *
  {
  	va_list ap;
  
@@ -537,7 +539,7 @@ as adding/removing interfaces.
  	if (level >= wpa_debug_level) {
  #ifdef CONFIG_ANDROID_LOG
  		va_start(ap, fmt);
-@@ -260,6 +270,9 @@ void _wpa_hexdump(int level, const char
+@@ -269,6 +279,9 @@ void _wpa_hexdump(int level, const char
  {
  	size_t i;
  
@@ -562,7 +564,7 @@ as adding/removing interfaces.
  extern int wpa_debug_timestamp;
 --- a/wpa_supplicant/Makefile
 +++ b/wpa_supplicant/Makefile
-@@ -192,8 +192,20 @@ endif
+@@ -194,8 +194,20 @@ endif
  ifdef CONFIG_UBUS
  CFLAGS += -DUBUS_SUPPORT
  OBJS += ubus.o
@@ -584,7 +586,7 @@ as adding/removing interfaces.
  endif
  
  ifdef CONFIG_CODE_COVERAGE
-@@ -1052,6 +1064,9 @@ OBJS += ../src/ap/ctrl_iface_ap.o
+@@ -1054,6 +1066,9 @@ OBJS += ../src/ap/ctrl_iface_ap.o
  ifdef CONFIG_UBUS
  OBJS += ../src/ap/ubus.o
  endif

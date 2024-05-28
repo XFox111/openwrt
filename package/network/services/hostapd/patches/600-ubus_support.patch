@@ -7,7 +7,7 @@ probe/assoc/auth requests via object subscribe.
 
 --- a/hostapd/Makefile
 +++ b/hostapd/Makefile
-@@ -166,6 +166,12 @@ OBJS += ../src/common/hw_features_common
+@@ -166,6 +166,14 @@ OBJS += ../src/common/hw_features_common
  
  OBJS += ../src/eapol_auth/eapol_auth_sm.o
  
@@ -15,7 +15,9 @@ probe/assoc/auth requests via object subscribe.
 +CFLAGS += -DUBUS_SUPPORT
 +OBJS += ../src/utils/uloop.o
 +OBJS += ../src/ap/ubus.o
++OBJS += ../src/utils/ubus_debug.o
 +LIBS += -lubox -lubus
++OBJS_c += ../src/utils/ubus_debug_fake.o
 +endif
  
  ifdef CONFIG_CODE_COVERAGE
@@ -751,7 +753,23 @@ probe/assoc/auth requests via object subscribe.
 +}
 --- a/wpa_supplicant/Makefile
 +++ b/wpa_supplicant/Makefile
-@@ -189,6 +189,13 @@ ifdef CONFIG_EAPOL_TEST
+@@ -113,6 +113,7 @@ OBJS += ../src/utils/wpabuf.o
+ OBJS += ../src/utils/bitfield.o
+ OBJS += ../src/utils/ip_addr.o
+ OBJS += ../src/utils/crc32.o
++OBJS += ../src/utils/ubus_debug_fake.o
+ OBJS += twt.o
+ OBJS_p = wpa_passphrase.o
+ OBJS_p += ../src/utils/common.o
+@@ -121,6 +122,7 @@ OBJS_p += ../src/utils/wpabuf.o
+ OBJS_c = wpa_cli.o ../src/common/wpa_ctrl.o
+ OBJS_c += ../src/utils/wpa_debug.o
+ OBJS_c += ../src/utils/common.o
++OBJS_c += ../src/utils/ubus_debug_fake.o
+ OBJS_c += ../src/common/cli.o
+ 
+ ifndef CONFIG_OS
+@@ -189,6 +191,13 @@ ifdef CONFIG_EAPOL_TEST
  CFLAGS += -Werror -DEAPOL_TEST
  endif
  
@@ -765,7 +783,7 @@ probe/assoc/auth requests via object subscribe.
  ifdef CONFIG_CODE_COVERAGE
  CFLAGS += -O0 -fprofile-arcs -ftest-coverage -U_FORTIFY_SOURCE
  LIBS += -lgcov
-@@ -1042,6 +1049,9 @@ ifdef CONFIG_CTRL_IFACE_MIB
+@@ -1042,6 +1051,9 @@ ifdef CONFIG_CTRL_IFACE_MIB
  CFLAGS += -DCONFIG_CTRL_IFACE_MIB
  endif
  OBJS += ../src/ap/ctrl_iface_ap.o
@@ -894,12 +912,15 @@ probe/assoc/auth requests via object subscribe.
  
  #ifdef CONFIG_HS20
  static int hs20_parse_conn_capab(struct hostapd_bss_config *bss, char *buf,
-@@ -3024,6 +3023,14 @@ static int hostapd_config_fill(struct ho
+@@ -3024,6 +3023,17 @@ static int hostapd_config_fill(struct ho
  		   0) {
  		bss->radius_das_require_message_authenticator = atoi(pos);
  #endif /* CONFIG_NO_RADIUS */
 +
 +#ifdef UBUS_SUPPORT
++	} else if (os_strcmp(buf, "uci_uuid") == 0) {
++		os_free(bss->uci_uuid);
++		bss->uci_uuid = os_strdup(pos);
 +	} else if (os_strcmp(buf, "uci_device") == 0) {
 +		os_free(bss->uci_device);
 +		bss->uci_device = os_strdup(pos);
@@ -911,20 +932,22 @@ probe/assoc/auth requests via object subscribe.
  		if (bss->auth_algs == 0) {
 --- a/src/ap/ap_config.c
 +++ b/src/ap/ap_config.c
-@@ -887,6 +887,7 @@ void hostapd_config_free_bss(struct host
+@@ -887,6 +887,8 @@ void hostapd_config_free_bss(struct host
  	os_free(conf->model_description);
  	os_free(conf->model_url);
  	os_free(conf->upc);
 +	os_free(conf->uci_device);
++	os_free(conf->uci_uuid);
  	for (i = 0; i < MAX_WPS_VENDOR_EXTENSIONS; i++)
  		wpabuf_free(conf->wps_vendor_ext[i]);
  	wpabuf_free(conf->wps_application_ext);
 --- a/src/ap/ap_config.h
 +++ b/src/ap/ap_config.h
-@@ -525,6 +525,8 @@ struct hostapd_bss_config {
+@@ -525,6 +525,9 @@ struct hostapd_bss_config {
  #endif /* CONFIG_WPS */
  	int pbc_in_m1;
  	char *server_id;
++	char *uci_uuid;
 +	char *uci_device;
 +	int ubus_acct_interim_interval;
  
@@ -1023,3 +1046,28 @@ probe/assoc/auth requests via object subscribe.
  		accounting_sta_stop(hapd, sta);
  		sta->eapol_sm->eapolLogoff = true;
  		sta->eapol_sm->dot1xAuthEapolLogoffFramesRx++;
+--- a/src/utils/wpa_debug.c
++++ b/src/utils/wpa_debug.c
+@@ -9,6 +9,7 @@
+ #include "includes.h"
+ 
+ #include "common.h"
++#include "ubus_debug.h"
+ 
+ #ifdef CONFIG_DEBUG_SYSLOG
+ #include <syslog.h>
+@@ -217,6 +218,14 @@ void _wpa_printf(int level, const char *
+ 				     ANDROID_LOG_NAME, fmt, ap);
+ 		va_end(ap);
+ #else /* CONFIG_ANDROID_LOG */
++#ifdef UBUS_SUPPORT
++		if (level >= MSG_ERROR) {
++			va_list cap;
++			va_copy(cap, ap);
++			wpa_ubus_error_msg(fmt, cap);
++			va_end(cap);
++		}
++#endif
+ #ifdef CONFIG_DEBUG_SYSLOG
+ 		if (wpa_debug_syslog) {
+ 			va_start(ap, fmt);
