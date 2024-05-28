@@ -81,6 +81,7 @@ void hostapd_ubus_event_sta_account_start(struct hostapd_data *hapd,
 		struct sta_info *sta);
 void hostapd_ubus_event_sta_account_stop(struct hostapd_data *hapd,
 		struct sta_info *sta);
+void hostapd_ubus_event_ch_switch(struct hostapd_iface *iface);
 
 #else
 
@@ -120,6 +121,13 @@ static inline void hostapd_ubus_handle_link_measurement(struct hostapd_data *hap
 }
 
 static inline void hostapd_ubus_notify(struct hostapd_data *hapd, const char *type, const u8 *mac)
+{
+}
+
+static inline void hostapd_ubus_event_iface_state(struct hostapd_iface *iface, int s)
+{
+}
+static inline void hostapd_ubus_event_ch_switch(struct hostapd_iface *iface)
 {
 }
 

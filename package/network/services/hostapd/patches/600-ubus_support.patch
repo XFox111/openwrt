@@ -124,7 +124,15 @@ probe/assoc/auth requests via object subscribe.
  #ifdef CONFIG_P2P
  	if (elems.p2p) {
  		wpabuf_free(sta->p2p_ie);
-@@ -2295,6 +2306,7 @@ static int hostapd_notif_update_dh_ie(st
+@@ -1345,6 +1356,7 @@ void hostapd_event_ch_switch(struct host
+ 		}
+ 	}
+ #endif /* CONFIG_OCV */
++	hostapd_ubus_event_ch_switch(hapd->iface);
+ #endif /* NEED_AP_MLME */
+ }
+ 
+@@ -2295,6 +2307,7 @@ static int hostapd_notif_update_dh_ie(st
  	sta = ap_get_sta(hapd, peer);
  	if (sta) {
  		ap_sta_no_session_timeout(hapd, sta);
