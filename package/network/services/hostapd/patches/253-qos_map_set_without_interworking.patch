@@ -6,24 +6,6 @@ This feature is useful on its own even without full interworking support
 
 --- a/hostapd/config_file.c
 +++ b/hostapd/config_file.c
-@@ -1680,6 +1680,8 @@ static int parse_anqp_elem(struct hostap
- 	return 0;
- }
- 
-+#endif /* CONFIG_INTERWORKING */
-+
- 
- static int parse_qos_map_set(struct hostapd_bss_config *bss,
- 			     char *buf, int line)
-@@ -1721,8 +1723,6 @@ static int parse_qos_map_set(struct host
- 	return 0;
- }
- 
--#endif /* CONFIG_INTERWORKING */
--
- 
- #ifdef CONFIG_HS20
- static int hs20_parse_conn_capab(struct hostapd_bss_config *bss, char *buf,
 @@ -4260,10 +4260,10 @@ static int hostapd_config_fill(struct ho
  		bss->gas_frag_limit = val;
  	} else if (os_strcmp(buf, "gas_comeback_delay") == 0) {

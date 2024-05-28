@@ -609,6 +609,8 @@ hostapd_set_bss_options() {
 		append bss_conf "ap_max_inactivity=$max_inactivity" "$N"
 	fi
 	[ -n "$device" ] && append bss_conf "uci_device=$device" "$N"
+	[ -n "$ubus_acct_interval" ] && \
+		append bss_conf "ubus_acct_interim_interval=$ubus_acct_interval" "$N"
 
 	[ "$airtime_bss_weight" -gt 0 ] && append bss_conf "airtime_bss_weight=$airtime_bss_weight" "$N"
 	[ "$airtime_bss_limit" -gt 0 ] && append bss_conf "airtime_bss_limit=$airtime_bss_limit" "$N"

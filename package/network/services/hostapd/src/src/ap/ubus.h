@@ -29,6 +29,7 @@ struct hostapd_ubus_request {
 
 struct hostapd_iface;
 struct hostapd_data;
+struct sta_info;
 struct hapd_interfaces;
 struct rrm_measurement_beacon_report;
 struct sta_info;
@@ -75,6 +76,11 @@ int hostapd_ubus_notify_bss_transition_query(
 	const u8 *candidate_list, u16 candidate_list_len);
 void hostapd_ubus_notify_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 				    const char *auth_alg);
+
+void hostapd_ubus_event_sta_account_start(struct hostapd_data *hapd,
+		struct sta_info *sta);
+void hostapd_ubus_event_sta_account_stop(struct hostapd_data *hapd,
+		struct sta_info *sta);
 
 #else
 
@@ -149,7 +155,12 @@ static inline void hostapd_ubus_event_iface_state(struct hostapd_iface *iface, i
 }
 
 
-static inline void hostapd_ubus_event_iface_state(struct hostapd_iface *iface, int s)
+static inline void hostapd_ubus_event_sta_account_start(struct hostapd_data *hapd,
+		struct sta_info *sta)
+{
+}
+static inline void hostapd_ubus_event_sta_account_stop(struct hostapd_data *hapd,
+		struct sta_info *sta)
 {
 }
 
